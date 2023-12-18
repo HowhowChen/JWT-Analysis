@@ -42,6 +42,7 @@ type PacketInfo struct {
 
 type Packet struct {
     FileName      string  `json:"file_name"`
+    Host          string  `json:"host,omitempty"`
     ArrivalTime   string  `json:"arrival_time"`
     ExpTime       string  `json:"exp_time"`
     Jwt           string  `json:"jwt"`
@@ -80,7 +81,7 @@ func decodePayloadToJSON(payload string) (map[string]interface{}, error) {
 
     err = json.Unmarshal(bytes, &JSON)
     if err != nil {
-        return nil, errors.New("the JWT Payload JSON Parse Error")
+        return nil, errors.New("The JWT Payload JSON Parse Error")
     }
 
     return JSON, nil
@@ -115,7 +116,6 @@ func mkDir(dirName string) error {
 func (p *PacketInfo) printPacketInfo(packet gopacket.Packet, fileName string) error {
     arrivalTime := packet.Metadata().Timestamp
     NewArrivalTime := arrivalTime.Format("2006-01-02 15:04:05")
-    fmt.Println("Arrival Time: ", NewArrivalTime)
 
     /**
     ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
@@ -148,11 +148,10 @@ func (p *PacketInfo) printPacketInfo(packet gopacket.Packet, fileName string) er
     // Application Layer
     applicationLayer := packet.ApplicationLayer()
     if applicationLayer != nil {
-        fmt.Println("Application layer/Payload found.")
         payload := applicationLayer.Payload()
-
+        var packetHost string
         if host := extractHostFromHTTPHeader(payload); host != "" {
-            fmt.Println("Host:", host)
+            packetHost = strings.Split(host, "\r")[0]
 		}
         
         if jwt := extractAuthorizationFromHTTPHeader(payload); jwt != "" {
@@ -186,9 +185,10 @@ func (p *PacketInfo) printPacketInfo(packet gopacket.Packet, fileName string) er
                     
                     // Switch exp timestamp format
                     newExpTime := expTimeCovert(exp)
-                    fmt.Println("Exp Time: ", newExpTime)
+
                     p.Packets = append(p.Packets, Packet{
                         FileName:      fileName,
+                        Host:          packetHost,
                         ArrivalTime:   NewArrivalTime,
                         ExpTime:       newExpTime,
                         Jwt:           jwt,
@@ -197,6 +197,7 @@ func (p *PacketInfo) printPacketInfo(packet gopacket.Packet, fileName string) er
                 } else {
                     p.Packets = append(p.Packets, Packet{
                         FileName:      fileName,
+                        Host:          packetHost,
                         ArrivalTime:   NewArrivalTime,
                         ExpTime:       "null",
                         Jwt:           jwt,
@@ -211,6 +212,11 @@ func (p *PacketInfo) printPacketInfo(packet gopacket.Packet, fileName string) er
 }
 
 func main() {
+    defer func() {
+        fmt.Println("Process was Finished!")
+        os.Exit(0)
+    }()
+
     dataInfo := DataInfo{}
     // Read the data directory
     categories, _ := os.ReadDir(dataPath)
@@ -238,7 +244,7 @@ func main() {
                 for packet := range packetSource.Packets() {
                     err := packetInfo.printPacketInfo(packet, file.Name())
                     if err != nil {
-                        fmt.Println(err)
+                        fmt.Println(ip.Name(), file.Name(), err)
                         continue
                     }
                 }
@@ -253,5 +259,4 @@ func main() {
     if err != nil {
         fmt.Println("The file can't be written ")
     }
-    fmt.Println(string(byteSlice))
 }
